@@ -9,7 +9,8 @@ echo "${grn}[info]${end} update@22.12.13"
 
 # Check if yq is installed
 yqpath=/usr/bin/yq
-if [ -f "$yqpath" ]; then
+if [ -f "$yqpath" ]
+then
     echo "${grn}[info]${end} 於 $yqpath 偵測到已安裝yq"
 else
     read -p  "${yel}[info]${end} $yqpath 不存在, 幫你裝個? [y/n] " installyq
@@ -22,7 +23,6 @@ else
     else
     echo "${red}[info]${end} Fine，那你自己把yq裝好 :)"
     fi
-
 fi
 # Ask if the current cluster is the manin cluster
 #read -p "[config] is this cluster the \"main\" cluster? [y/n] " maincluster
@@ -74,10 +74,10 @@ EOF
         apt-cache show kubectl | grep "Version: $version"
         sudo apt install -y kubelet=$version kubectl=$version kubeadm=$version
         sudo apt-mark hold kubelet kubeadm kubectl
-        sudo docker pull k8s.gcr.io/kube-apiserver-amd64:v1.23.15
-        sudo docker pull k8s.gcr.io/kube-controller-manager-amd64:v1.23.15
-        sudo docker pull k8s.gcr.io/kube-scheduler-amd64:v1.23.15
-        sudo docker pull k8s.gcr.io/kube-proxy-amd64:v1.23.15
+        sudo docker pull k8s.gcr.io/kube-apiserver-amd64:v1.23.16
+        sudo docker pull k8s.gcr.io/kube-controller-manager-amd64:v1.23.16
+        sudo docker pull k8s.gcr.io/kube-scheduler-amd64:v1.23.16
+        sudo docker pull k8s.gcr.io/kube-proxy-amd64:v1.23.16
         sudo docker pull k8s.gcr.io/pause:3.6
         sudo docker pull k8s.gcr.io/etcd:3.5.1-0
         sudo docker pull k8s.gcr.io/coredns/coredns:v1.8.6
@@ -261,3 +261,186 @@ then
 else
     echo "${red}[info]${end} 幫你寫好還不用，那你自己慢慢加第二叢集資訊"
 fi
+### 上面是自動裝好k8s叢集互加
+
+nmappath=/usr/bin/nmap
+if [ -f "$nmappath" ]
+then
+    echo "${grn}[info]${end} 於 $nmappath 偵測到已安裝nmap"
+else
+    read -p  "${yel}[info]${end} $nmappath 不存在, 幫你裝個? [y/n] " "installnmap"
+    if [ "$installnmap" == "y" ]
+    then
+        echo "${yel}[info]${end} 為了安裝nmap，請輸入目前使用者的密碼(我假設你有sudo權限)"
+        sudo echo "${grn}[info]${end} 我有權限惹!"
+        sudo apt install -y nmap
+    else
+        echo "${red}[info]${end} Fine，那你自己把nmap裝好 :)"
+        exit
+    fi
+fi
+
+# ref: https://stackoverflow.com/questions/13322485/how-to-get-the-primary-ip-address-of-the-local-machine-on-linux-and-os-x
+inferenceip=$(hostname -I | cut -d' ' -f1)
+echo "猜你的IP是: \"$inferenceip\""
+
+netmask=$(ifconfig | grep "$inferenceip" | awk -F " " '{print $4}')
+echo "猜你的遮罩是: \"$netmask\""
+
+# ref: https://stackoverflow.com/questions/50413579/bash-convert-netmask-in-cidr-notation
+cidr=$(
+awk -F. '{
+    split($0, octets)
+    for (i in octets) {
+        mask += 8 - log(2**8 - octets[i])/log(2);
+    }
+    print "/" mask
+}' <<< "$netmask")
+echo "netmark → cidr: \"$cidr\""
+read -p "${yel}[config]${end} 以上資訊無誤嗎? [y/n] " ifipcorrect
+
+# or and ref: https://unix.stackexchange.com/questions/47584/in-a-bash-script-using-the-conditional-or-in-an-if-statement
+if [ "$ifipcorrect" == "n" ] || [ "$ifipcorrect" == "N" ]
+then
+    echo "${grn}[info]${end} Okay，那等等你幫我手動輸入下，按下\"ENTER\"後顯示網卡相關訊息"
+    read pause
+    ifconfig
+    read -p "${yel}[config]${end} 輸入所使用網卡IP " inferenceip
+    read -p "${yel}[config]${end} 輸入所使用網卡遮罩 " netmask
+fi
+
+# 優質寫法ref: https://stackoverflow.com/questions/31318068/shell-script-to-remove-a-file-if-it-already-existecho "${grn}[info]${end} 產生所在區網之IP..."
+[ -e ip.list ] && rm ip.list
+[ -e ipup.list ] && rm ipup.list
+[ -e ipdown.list ] && rm ipdown.list
+# 記得先裝nmap
+nmap -sL -n "$inferenceip$cidr" | awk '/Nmap scan report/{print $NF}'
+nmap -sL -n "$inferenceip$cidr" | awk '/Nmap scan report/{print $NF}' > ip.list
+echo "${grn}[info]${end} 開始掃你家區網..."
+# ref: https://stackoverflow.com/questions/1521462/looping-through-the-content-of-a-file-in-bash
+# ref: https://stackoverflow.com/questions/60610269/bash-script-for-checking-if-a-host-is-on-the-local-network
+while read ip
+do
+    # echo "$ip"
+    if ping -c 1 -W 1 "$ip" 2>&1 >/dev/null;
+    then
+        echo "$ip ${grn}is up${end}"
+        echo "$ip" >> ipup.list
+    else
+        echo "$ip ${red}is down${end}"
+        echo "$ip" >> ipdown.list
+fi
+done <ip.list
+# 去頭去尾
+# 去頭ref: https://www.baeldung.com/linux/remove-first-line-text-file
+# 去尾ref: https://stackoverflow.com/questions/4881930/remove-the-last-line-from-a-file-in-bash
+sed -i '1d' ipdown.list
+sed -i '$ d' ipdown.list
+# 反向的ipdown.list
+# ref: https://stackoverflow.com/questions/742466/how-can-i-reverse-the-order-of-lines-in-a-file
+tac ipdown.list > ipdown.list.reverse
+
+if [ "$ismaincluster" == "y" ]
+then
+    echo "${grn}[info]${end} 位於${yel}主${end}叢集，部署MetalLB之IP將由數字小至大的可用IP優先取得"
+    avalipfile2read=ipdown.list
+    ipoperator="-1"
+else
+    echo "${grn}[info]${end} 位於${yel}非主${end}叢集，部署MetalLB之IP將由數字大至小的可用IP優先取得"
+    avalipfile2read=ipdown.list.reverse
+    ipoperator="+1"
+fi
+
+_1sec_pre="0"
+_2sec_pre="0"
+_3sec_pre="0"
+_4sec_pre="0"
+ipbreak="0"
+
+while read ip
+do
+    echo "$ip"
+    _1sec=$(echo "$ip" | awk -F "." '{print $1}')
+    _2sec=$(echo "$ip" | awk -F "." '{print $2}')
+    _3sec=$(echo "$ip" | awk -F "." '{print $3}')
+    _4sec=$(echo "$ip" | awk -F "." '{print $4}')
+    # echo "${yel}[Debug]${end} _1sec: $_1sec"
+    # echo "${yel}[Debug]${end} _2sec: $_2sec"
+    # echo "${yel}[Debug]${end} _3sec: $_3sec"
+    # echo "${yel}[Debug]${end} _4sec: $_4sec"
+    # echo "${yel}[Debug]${end} _1sec_pre: $_1sec_pre"
+    # echo "${yel}[Debug]${end} _2sec_pre: $_2sec_pre"
+    # echo "${yel}[Debug]${end} _3sec_pre: $_3sec_pre"
+    # echo "${yel}[Debug]${end} _4sec_pre: $_4sec_pre"
+    if [ "$_1sec" == "$_1sec_pre" ]
+    then
+        echo "1st part matched"
+        if [ "$_2sec" == "$_2sec_pre" ] && [ "$ipbreak" != "1" ]
+        then
+            echo "2nd part matched"
+            if [ "$_3sec" == "$_3sec_pre" ] && [ "$ipbreak" != "1" ]
+            then
+            echo "3rd part matched"
+                if [ "$(($_4sec $ipoperator))" == "$_4sec_pre" ] && [ "$ipbreak" != "1" ]
+                then
+                    echo "4th part matched"
+                    gatewayip1="$_1sec.$_2sec.$_3sec.$_4sec"
+                    gatewayip2="$_1sec_pre.$_2sec_pre.$_3sec_pre.$_4sec_pre"
+                    ipbreak="1"
+                    break
+                else
+                    echo "4th part not matched"
+                    _4sec_pre=$_4sec
+                fi
+            else
+            echo "3rd part not matched"
+            _3sec_pre=$_3sec
+            fi
+        else
+        echo "2nd not part matched"
+        _2sec_pre=$_2sec
+        fi
+    else
+        echo "1st not part matched"
+        _1sec_pre=$_1sec
+    fi
+    sleep 0.1
+done <$avalipfile2read
+
+if [ -z "$gatewayip1" ]
+then
+      echo "算你雖，沒找到兩個連續的IP，你自己指定2個要用的IP"
+      read -p "${yel}[config]${end} 輸入\"istio gateway ip1\" " gatewayip1
+      read -p "${yel}[config]${end} 輸入\"istio gateway ip2\" " gatewayip2
+fi
+# 要不要改順序等之後再說 4-5 5-4
+echo "istio gateway ip1: $gatewayip1"
+echo "istio gateway ip2: $gatewayip2"
+
+# template
+cat <<'EOF' >MLB.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+    - name: default
+      protocol: layer2
+      auto-assign: true
+      addresses:
+      - gatewayip1-gatewayip2
+EOF
+
+sed -i "s/gatewayip1/$gatewayip1/g" MLB.yaml
+sed -i "s/gatewayip2/$gatewayip2/g" MLB.yaml
+echo "${yel}[config]${end} 等會要appy的MetalLB設定"
+cat MLB.yaml | yq e
+echo "${grn}[info]${end} 創建\"metallb-system\"之NameSpace"
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
+echo "${grn}[info]${end} 設定MLB"
+kubectl apply -f MLB.yaml
+echo "${grn}[info]${end} 部署MLB"
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml
