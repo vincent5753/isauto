@@ -4,8 +4,11 @@ grn=$'\e[1;32m'
 yel=$'\e[1;33m'
 end=$'\e[0m'
 
-echo "${grn}[info]${end} Made by vp@22.12.05"
+echo "${grn}[info]${end} Made by VP@22.12.05"
 echo "${grn}[info]${end} update@22.12.13 23.03.07 23.03.08 23.03.09"
+echo
+echo "${grn}[info]${end} 此腳本假設使用過程中 (1) 你網路很好不會斷 (2) 沒有 apt/dpkg lock相關的問題 ， 按下\"Enter\"以繼續"
+read pause
 
 curshell=$(echo $0 | sed 's/-//g')
 echo "${yel}[info]${end} 偵測到使用\"$curshell\"作為shell，相關設定檔會被寫入進\"$HOME/.${curshell}rc\""
