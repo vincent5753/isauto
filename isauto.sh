@@ -474,7 +474,7 @@ kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manif
 istiover=1.13.1
 echo "${yel}[info]${end} istio version: $istiover"
 echo "${grn}[info]${end} 下載並解壓istio..."
-curl -L https://istio.io/downloadIstio | ISTIO_VERSION=$istiover TARGET_ARCH=x86_64 sh -
+curl --silent -L https://istio.io/downloadIstio | ISTIO_VERSION=$istiover TARGET_ARCH=x86_64 sh -
 cd istio-$istiover/
 echo "${yel}[config]${end} PATH變動如下↓"
 echo "${yel}[config]${end} 原始PATH: ${grn}$PATH${end}"
