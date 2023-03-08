@@ -5,7 +5,7 @@ yel=$'\e[1;33m'
 end=$'\e[0m'
 
 echo "${grn}[info]${end} Made by vp@22.12.05"
-echo "${grn}[info]${end} update@22.12.13,23.03.07"
+echo "${grn}[info]${end} update@22.12.13 23.03.07 23.03.08"
 
 # Check if yq is installed
 yqpath=/usr/bin/yq
@@ -118,6 +118,9 @@ EOF
     fi
 fi
 
+cp ~/.kube/config ~/.kube/config.bk
+echo "${grn}[info]${end} kubeconfig備份於\"$HOME/.kube/config.bk\""
+
 # 改k8s叢集名稱和kubeconfigk，這部分要一氣呵成
 read -p "${yel}[info]${end} 幫你改叢集名稱? [y/n] " chclustername
 cluster1name=kubernetes1
@@ -164,9 +167,6 @@ then
 else
     echo "${red}[info]${end} 歐給，幫你寫好還不用，那你自己改"
 fi
-
-cp ~/.kube/config ~/.kube/config.bk
-echo "${grn}[info]${end} kubeconfig備份於\"$HOME/.kube/config.bk\""
 
 # 檢查一下次要 kubeconfig 是否存在
 # Check if 2nd kubeconfig exist
@@ -451,12 +451,6 @@ sed -i "s/gatewayip1/$gatewayip1/g" MLB.yaml
 sed -i "s/gatewayip2/$gatewayip2/g" MLB.yaml
 echo "${yel}[config]${end} 等會要appy的MetalLB設定"
 cat MLB.yaml | yq e
-echo "${grn}[info]${end} 創建\"metallb-system\"之NameSpace"
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
-echo "${grn}[info]${end} 設定MLB"
-kubectl apply -f MLB.yaml
-echo "${grn}[info]${end} 部署MLB"
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml
 
 echo "${grn}[info]${end} 安裝並設定MetalLB..."
 echo "${grn}[info]${end} 修改kube-proxy configmap，strictARP: ${yel}false${end} → ${yel}true${end}"
@@ -470,7 +464,9 @@ sed -e "s/strictARP: false/strictARP: true/" | \
 kubectl apply -f - -n kube-system
 echo "${grn}[info]${end} 創建\"metallb\"之namespace"
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
-echo "${grn}[info]${end} 安裝metallb..."
+echo "${grn}[info]${end} 設定MLB"
+kubectl apply -f MLB.yaml
+echo "${grn}[info]${end} 部署MLB"
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml
 
 read -p "${grn}[info]${end} 裝istio前暫停下" pause
@@ -539,7 +535,7 @@ then
         then
             break
         fi
-        sleep 1
+        sleep 15
     done
     echo "${yel}[info]${end} istio.DISCOVERY_ADDRESS: $DISCOVERY_ADDRESS\""
     if [ -z "$DISCOVERY_ADDRESS" ]
@@ -551,7 +547,7 @@ then
 fi
 cat IstioOperator.yaml
 
-istioctl install -f IstioOperator.yaml
+istioctl install -y -f IstioOperator.yaml
 
 echo "${grn}[info]${end} 安裝 East-West Gateway"
 samples/multicluster/gen-eastwest-gateway.sh \
