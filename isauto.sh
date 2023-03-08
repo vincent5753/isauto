@@ -5,7 +5,7 @@ yel=$'\e[1;33m'
 end=$'\e[0m'
 
 echo "${grn}[info]${end} Made by vp@22.12.05"
-echo "${grn}[info]${end} update@22.12.13"
+echo "${grn}[info]${end} update@22.12.13,23.03.07"
 
 # Check if yq is installed
 yqpath=/usr/bin/yq
@@ -33,7 +33,7 @@ then
     echo "${grn}[info]${end} 偵測到 $kubeconfigpath ，已安裝 k8s!"
     read -p "${yel}[config]${end} 這是主叢集嗎? [y/n] " ismaincluster
 else
-    echo "${red}[info]${end} $kubeconfigpath 不存在"
+    echo "${yel}[info]${end} $kubeconfigpath 不存在"
     read -p "${yel}[config]${end} 這是主叢集嗎? [y/n] " ismaincluster
     read -p "${yel}[config]${end} 幫你裝 Kubernetes ? [y/n] " installk8s
     if [ "$installk8s" == "y" ]
@@ -165,6 +165,9 @@ else
     echo "${red}[info]${end} 歐給，幫你寫好還不用，那你自己改"
 fi
 
+cp ~/.kube/config ~/.kube/config.bk
+echo "${grn}[info]${end} kubeconfig備份於\"$HOME/.kube/config.bk\""
+
 # 檢查一下次要 kubeconfig 是否存在
 # Check if 2nd kubeconfig exist
 # 主叢集就拉成 config2 ，非主就拉成 config1
@@ -183,7 +186,7 @@ then
         then
             read -p "${yel}[config]${end} 輸入像是這樣的使用者和ip \"user 10.20.1.40\" " username ip
             echo "${yel}[config]${end} 執行 \"scp $username@$ip:/home/$username/.kube/config ~/.kube/config2\", 請輸入遠端機器的密碼!"
-            scp $username@$ip:/home/$username/.kube/config $kubeconfig2path
+            scp $username@$ip:/home/$username/.kube/config.bk $kubeconfig2path
         else
             echo "${red}[config]${end} Ok, 你自己把它放在\"~/.kube/config2\""
         fi
@@ -199,7 +202,7 @@ else
         then
             read -p "${yel}[config]${end} 輸入像是這樣的使用者和ip \"user 10.20.1.40\" " username ip
             echo "${yel}[config]${end} 執行 \"scp $username@$ip:/home/$username/.kube/config ~/.kube/config1\", 請輸入遠端機器的密碼!"
-            scp $username@$ip:/home/$username/.kube/config $kubeconfig1path
+            scp $username@$ip:/home/$username/.kube/config.bk $kubeconfig1path
         else
             echo "${red}[info]${end} Ok，幫你寫好還不用，你自己把它放在\"~/.kube/config1\""
         fi
@@ -314,8 +317,14 @@ fi
 [ -e ipup.list ] && rm ipup.list
 [ -e ipdown.list ] && rm ipdown.list
 # 記得先裝nmap
-nmap -sL -n "$inferenceip$cidr" | awk '/Nmap scan report/{print $NF}'
+#nmap -sL -n "$inferenceip$cidr" | awk '/Nmap scan report/{print $NF}'
+echo "${yel}[info]${end} ↓區網範圍"
 nmap -sL -n "$inferenceip$cidr" | awk '/Nmap scan report/{print $NF}' > ip.list
+head -n 3 ip.list
+echo "."
+echo "."
+echo "."
+tail -n 3 ip.list
 echo "${grn}[info]${end} 開始掃你家區網..."
 # ref: https://stackoverflow.com/questions/1521462/looping-through-the-content-of-a-file-in-bash
 # ref: https://stackoverflow.com/questions/60610269/bash-script-for-checking-if-a-host-is-on-the-local-network
@@ -414,8 +423,14 @@ then
       read -p "${yel}[config]${end} 輸入\"istio gateway ip2\" " gatewayip2
 fi
 # 要不要改順序等之後再說 4-5 5-4
-echo "istio gateway ip1: $gatewayip1"
-echo "istio gateway ip2: $gatewayip2"
+if [ "$ismaincluster" == "y" ]
+then
+    tmpip="$gatewayip1"
+    gatewayip1="$gatewayip2"
+    gatewayip1="$tmpip"
+fi
+echo "${yel}[info]${end} istio gateway ip1: $gatewayip1"
+echo "${yel}[info]${end} istio gateway ip2: $gatewayip2"
 
 # template
 cat <<'EOF' >MLB.yaml
@@ -444,3 +459,98 @@ echo "${grn}[info]${end} 設定MLB"
 kubectl apply -f MLB.yaml
 echo "${grn}[info]${end} 部署MLB"
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml
+
+echo "${grn}[info]${end} 安裝並設定MetalLB..."
+echo "${grn}[info]${end} 修改kube-proxy configmap，strictARP: ${yel}false${end} → ${yel}true${end}"
+echo "${grn}[info]${end} 顯示將作變動部分"
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+sed -e "s/strictARP: false/strictARP: true/" | \
+kubectl diff -f - -n kube-system
+echo "${grn}[info]${end} 修改kube-proxy configmap..."
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+sed -e "s/strictARP: false/strictARP: true/" | \
+kubectl apply -f - -n kube-system
+echo "${grn}[info]${end} 創建\"metallb\"之namespace"
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/namespace.yaml
+echo "${grn}[info]${end} 安裝metallb..."
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml
+
+read -p "${grn}[info]${end} 裝istio前暫停下" pause
+
+# istio相關部署
+istiover=1.13.1
+echo "${yel}[info]${end} istio version: $istiover"
+echo "${grn}[info]${end} 下載並解壓istio..."
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=$istiover TARGET_ARCH=x86_64 sh -
+cd istio-$istiover/
+echo "${yel}[config]${end} PATH變動如下↓"
+echo "${yel}[config]${end} 原始PATH: ${grn}$PATH${end}"
+echo "${yel}[config]${end} PATH變動: ${yel}$PWD/bin:${end}${grn}$PATH${end}"
+export PATH=$PWD/bin:$PATH
+echo "export PATH=$PWD/bin:$PATH" >> ~/.bashrc
+echo "${grn}[info]${end} 創建\"istio-system\" namespace"
+kubectl create --context="$CTX_CLUSTER1" ns istio-system
+kubectl create --context="$CTX_CLUSTER2" ns istio-system
+
+if [ "$ismaincluster" == "y" ]
+then
+    echo "${grn}[info]${end} 位於${yel}主${end}叢集，進行istio相關安裝"
+    echo "${grn}[info]${end} 建立 istio 所使用之憑證"
+    kubectl create secret generic cacerts -n istio-system --from-file=samples/certs/ca-cert.pem --from-file=samples/certs/ca-key.pem --from-file=samples/certs/root-cert.pem --from-file=samples/certs/cert-chain.pem
+    echo "${grn}[info]${end} 設定istio主叢集IstioOperator相關資訊"
+    clustername=$cluster1name
+    istionetwork="network1"
+else
+    echo "${grn}[info]${end} 位於${yel}非主${end}叢集，進行istio相關安裝"
+    echo "${grn}[info]${end} 建立 istio 所使用之憑證"
+    kubectl create secret generic cacerts -n istio-system --from-file=samples/certs/ca-cert.pem --from-file=samples/certs/ca-key.pem --from-file=samples/certs/root-cert.pem --from-file=samples/certs/cert-chain.pem
+    echo "${grn}[info]${end} 設定istio相關IstioOperator資訊"
+    clustername=$cluster2name
+    istionetwork="network2"
+fi
+
+echo "${grn}[info]${end} 生成IstioOperator yaml，儲存於\"$(pwd)/IstioOperator.yaml\""
+cat <<EOF > IstioOperator.yaml
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+spec:
+  values:
+    global:
+      meshID: mesh1
+      multiCluster:
+        clusterName: clustername2replace
+      network: network2replace
+EOF
+
+sed -i "s/clusterName: clustername2replace/clusterName: $clustername/" IstioOperator.yaml
+sed -i "s/network: network2replace/network: $istionetwork/" IstioOperator.yaml
+
+# 如果是非主叢集的話要加remotePilotAddress
+if [ $ismaincluster != "y" ]
+then
+    echo "${grn}[info]${end} 位於${yel}非主${end}叢集，請等待主叢集安裝完成後，按下 Enter 以繼續"
+    read -p pause pause
+export DISCOVERY_ADDRESS=$(kubectl \
+    --context="${CTX_CLUSTER1}" \
+    -n istio-system get svc istio-eastwestgateway \
+    -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    echo "${grn}[info]${end} 位於${yel}非主${end}叢集，新增\"DISCOVERY_ADDRESS\"變數 -> $DISCOVERY_ADDRESS"
+    echo "      remotePilotAddress: ${DISCOVERY_ADDRESS}" >> IstioOperator.yaml
+fi
+cat IstioOperator.yaml
+
+istioctl install -f IstioOperator.yaml
+
+echo "${grn}[info]${end} 安裝 East-West Gateway"
+samples/multicluster/gen-eastwest-gateway.sh \
+    --mesh mesh1 --cluster $clustername --network $istionetwork | \
+    istioctl install -y -f -
+
+echo "${grn}[info]${end} 公開叢集之apiserver"
+kubectl apply -n istio-system -f samples/multicluster/expose-services.yaml
+
+if [ $ismaincluster != "y" ]
+then
+echo "${grn}[info]${end} 公開主叢集之 api server"
+kubectl apply -n istio-system -f samples/multicluster/expose-services.yaml
+fi
