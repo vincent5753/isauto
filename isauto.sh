@@ -431,8 +431,6 @@ fi
 echo "${yel}[info]${end} istio gateway ip1: $gatewayip1"
 echo "${yel}[info]${end} istio gateway ip2: $gatewayip2"
 
-read -p pause pause
-
 # template
 cat <<'EOF' >MLB.yaml
 apiVersion: v1
@@ -471,8 +469,6 @@ echo "${grn}[info]${end} 設定MLB"
 kubectl apply -f MLB.yaml
 echo "${grn}[info]${end} 部署MLB"
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.12.1/manifests/metallb.yaml
-
-read -p "${grn}[info]${end} 裝istio前暫停下" pause
 
 # istio相關部署
 istiover=1.13.1
@@ -525,8 +521,7 @@ sed -i "s/network: network2replace/network: $istionetwork/" IstioOperator.yaml
 # 如果是非主叢集的話要加remotePilotAddress
 if [ $ismaincluster != "y" ]
 then
-    echo "${grn}[info]${end} 位於${yel}非主${end}叢集，請等待主叢集安裝完成後，按下 Enter 以繼續"
-    read -p pause pause
+    # echo "${grn}[info]${end} 位於${yel}非主${end}叢集，請等待主叢集安裝完成後，按下 Enter 以繼續"
     while true
     do
         export DISCOVERY_ADDRESS=$(kubectl \
