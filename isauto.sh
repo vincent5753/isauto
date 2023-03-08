@@ -39,7 +39,7 @@ else
     if [ "$installk8s" == "y" ]
     then
         echo "[info] 開裝k8s"
-        echo "${yel}[info]${end} 為了安裝k8s，請輸入目前使用者的密碼(如果有跳提示的話，然後我假設你有sudo權限，然後我不會幫你處理系統升級卡apt-lock)" # 註解好像有點長
+        echo "${yel}[info]${end} 為了安裝k8s，請輸入目前使用者的密碼(我假設你有sudo權限，然後我不會幫你處理系統升級卡apt-lock)" # 註解好像有點長
         sudo echo "${grn}[info]${end} 我有權限惹!"
         ### start of k8s install recipe
         sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
@@ -74,10 +74,10 @@ EOF
         apt-cache show kubectl | grep "Version: $version"
         sudo apt install -y kubelet=$version kubectl=$version kubeadm=$version
         sudo apt-mark hold kubelet kubeadm kubectl
-        sudo docker pull k8s.gcr.io/kube-apiserver-amd64:v1.23.16
-        sudo docker pull k8s.gcr.io/kube-controller-manager-amd64:v1.23.16
-        sudo docker pull k8s.gcr.io/kube-scheduler-amd64:v1.23.16
-        sudo docker pull k8s.gcr.io/kube-proxy-amd64:v1.23.16
+        sudo docker pull k8s.gcr.io/kube-apiserver-amd64:v1.23.17
+        sudo docker pull k8s.gcr.io/kube-controller-manager-amd64:v1.23.17
+        sudo docker pull k8s.gcr.io/kube-scheduler-amd64:v1.23.17
+        sudo docker pull k8s.gcr.io/kube-proxy-amd64:v1.23.17
         sudo docker pull k8s.gcr.io/pause:3.6
         sudo docker pull k8s.gcr.io/etcd:3.5.1-0
         sudo docker pull k8s.gcr.io/coredns/coredns:v1.8.6
@@ -274,7 +274,7 @@ else
     read -p  "${yel}[info]${end} $nmappath 不存在, 幫你裝個? [y/n] " "installnmap"
     if [ "$installnmap" == "y" ]
     then
-        echo "${yel}[info]${end} 為了安裝nmap，請輸入目前使用者的密碼(我假設你有sudo權限)"
+        echo "${yel}[info]${end} 為了安裝nmap，請輸入目前使用者的密碼(我假設你有sudo權限，然後我不會幫你處理系統升級卡apt-lock)"
         sudo echo "${grn}[info]${end} 我有權限惹!"
         sudo apt install -y nmap
     else
@@ -318,13 +318,8 @@ fi
 [ -e ipdown.list ] && rm ipdown.list
 # 記得先裝nmap
 #nmap -sL -n "$inferenceip$cidr" | awk '/Nmap scan report/{print $NF}'
-echo "${yel}[info]${end} ↓區網範圍"
 nmap -sL -n "$inferenceip$cidr" | awk '/Nmap scan report/{print $NF}' > ip.list
-head -n 3 ip.list
-echo "."
-echo "."
-echo "."
-tail -n 3 ip.list
+echo "${yel}[info]${end} 區網範圍: $(head -n 1 ip.list) ~ $(tail -n 1 ip.list)"
 echo "${grn}[info]${end} 開始掃你家區網..."
 # ref: https://stackoverflow.com/questions/1521462/looping-through-the-content-of-a-file-in-bash
 # ref: https://stackoverflow.com/questions/60610269/bash-script-for-checking-if-a-host-is-on-the-local-network
@@ -383,34 +378,41 @@ do
     # echo "${yel}[Debug]${end} _4sec_pre: $_4sec_pre"
     if [ "$_1sec" == "$_1sec_pre" ]
     then
-        echo "1st part matched"
+        # echo "1st part matched"
         if [ "$_2sec" == "$_2sec_pre" ] && [ "$ipbreak" != "1" ]
         then
-            echo "2nd part matched"
+            # echo "2nd part matched"
             if [ "$_3sec" == "$_3sec_pre" ] && [ "$ipbreak" != "1" ]
             then
-            echo "3rd part matched"
+            # echo "3rd part matched"
                 if [ "$(($_4sec $ipoperator))" == "$_4sec_pre" ] && [ "$ipbreak" != "1" ]
                 then
-                    echo "4th part matched"
-                    gatewayip1="$_1sec.$_2sec.$_3sec.$_4sec"
-                    gatewayip2="$_1sec_pre.$_2sec_pre.$_3sec_pre.$_4sec_pre"
-                    ipbreak="1"
+                    # echo "4th part matched"
+                    if [ "$ismaincluster" == "y" ]
+                    then
+                        gatewayip1="$_1sec_pre.$_2sec_pre.$_3sec_pre.$_4sec_pre"
+                        gatewayip2="$_1sec.$_2sec.$_3sec.$_4sec"
+                        ipbreak="1"
+                    else
+                        gatewayip1="$_1sec.$_2sec.$_3sec.$_4sec"
+                        gatewayip2="$_1sec_pre.$_2sec_pre.$_3sec_pre.$_4sec_pre"
+                        ipbreak="1"
+                    fi
                     break
                 else
-                    echo "4th part not matched"
+                    # echo "4th part not matched"
                     _4sec_pre=$_4sec
                 fi
             else
-            echo "3rd part not matched"
+            # echo "3rd part not matched"
             _3sec_pre=$_3sec
             fi
         else
-        echo "2nd not part matched"
+        # echo "2nd not part matched"
         _2sec_pre=$_2sec
         fi
     else
-        echo "1st not part matched"
+        # echo "1st not part matched"
         _1sec_pre=$_1sec
     fi
     sleep 0.1
@@ -422,15 +424,11 @@ then
       read -p "${yel}[config]${end} 輸入\"istio gateway ip1\" " gatewayip1
       read -p "${yel}[config]${end} 輸入\"istio gateway ip2\" " gatewayip2
 fi
-# 要不要改順序等之後再說 4-5 5-4
-if [ "$ismaincluster" == "y" ]
-then
-    tmpip="$gatewayip1"
-    gatewayip1="$gatewayip2"
-    gatewayip1="$tmpip"
-fi
+
 echo "${yel}[info]${end} istio gateway ip1: $gatewayip1"
 echo "${yel}[info]${end} istio gateway ip2: $gatewayip2"
+
+read -p pause pause
 
 # template
 cat <<'EOF' >MLB.yaml
@@ -530,10 +528,24 @@ if [ $ismaincluster != "y" ]
 then
     echo "${grn}[info]${end} 位於${yel}非主${end}叢集，請等待主叢集安裝完成後，按下 Enter 以繼續"
     read -p pause pause
-export DISCOVERY_ADDRESS=$(kubectl \
-    --context="${CTX_CLUSTER1}" \
-    -n istio-system get svc istio-eastwestgateway \
-    -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    while true
+    do
+        export DISCOVERY_ADDRESS=$(kubectl \
+        --context="${CTX_CLUSTER1}" \
+        -n istio-system get svc istio-eastwestgateway \
+        -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        echo "\"$DISCOVERY_ADDRESS\""
+        if [ -n "$DISCOVERY_ADDRESS" ]
+        then
+            break
+        fi
+        sleep 1
+    done
+    echo "${yel}[info]${end} istio.DISCOVERY_ADDRESS: $DISCOVERY_ADDRESS\""
+    if [ -z "$DISCOVERY_ADDRESS" ]
+    then
+        echo "DISCOVERY_ADDRESS為空值"
+    fi
     echo "${grn}[info]${end} 位於${yel}非主${end}叢集，新增\"DISCOVERY_ADDRESS\"變數 -> $DISCOVERY_ADDRESS"
     echo "      remotePilotAddress: ${DISCOVERY_ADDRESS}" >> IstioOperator.yaml
 fi
