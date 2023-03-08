@@ -5,7 +5,10 @@ yel=$'\e[1;33m'
 end=$'\e[0m'
 
 echo "${grn}[info]${end} Made by vp@22.12.05"
-echo "${grn}[info]${end} update@22.12.13 23.03.07 23.03.08"
+echo "${grn}[info]${end} update@22.12.13 23.03.07 23.03.08 23.03.09"
+
+curshell=$(echo $0 | sed 's/-//g')
+echo "${yel}[info]${end} 偵測到使用\"$curshell\"作為shell，相關設定檔會被寫入進\"$HOME/.${curshell}rc\""
 
 # Check if yq is installed
 yqpath=/usr/bin/yq
@@ -90,7 +93,7 @@ EOF
         sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
         sudo free -m
         source <(kubectl completion bash)
-        echo "source <(kubectl completion bash)" >> ~/.bashrc
+        echo "source <(kubectl completion bash)" >> "$HOME/.${curshell}rc"
         if [ $ismaincluster == "y" ]
         then
             sudo kubeadm init --service-cidr=10.96.0.0/12 --pod-network-cidr=10.244.0.0/16 --v=6
@@ -259,8 +262,8 @@ then
     mv tmp.yaml ~/.kube/config
     export CTX_CLUSTER1=$(kubectl config view -o jsonpath='{.contexts[0].name}')
     export CTX_CLUSTER2=$(kubectl config view -o jsonpath='{.contexts[1].name}')
-    echo "export CTX_CLUSTER1=$CTX_CLUSTER1" >> ~/.bashrc
-    echo "export CTX_CLUSTER2=$CTX_CLUSTER2" >> ~/.bashrc
+    echo "export CTX_CLUSTER1=$CTX_CLUSTER1" >> "$HOME/.${curshell}rc"
+    echo "export CTX_CLUSTER2=$CTX_CLUSTER2" >> "$HOME/.${curshell}rc"
 else
     echo "${red}[info]${end} 幫你寫好還不用，那你自己慢慢加第二叢集資訊"
 fi
@@ -284,11 +287,11 @@ else
 fi
 
 # ref: https://stackoverflow.com/questions/13322485/how-to-get-the-primary-ip-address-of-the-local-machine-on-linux-and-os-x
+echo "${grn}[info]${end} 偵測到下列網路資訊"
 inferenceip=$(hostname -I | cut -d' ' -f1)
-echo "猜你的IP是: \"$inferenceip\""
-
+echo "IP: \"$inferenceip\""
 netmask=$(ifconfig | grep "$inferenceip" | awk -F " " '{print $4}')
-echo "猜你的遮罩是: \"$netmask\""
+echo "遮罩: \"$netmask\""
 
 # ref: https://stackoverflow.com/questions/50413579/bash-convert-netmask-in-cidr-notation
 cidr=$(
@@ -299,7 +302,7 @@ awk -F. '{
     }
     print "/" mask
 }' <<< "$netmask")
-echo "netmark → cidr: \"$cidr\""
+echo "遮罩 → CIDR: \"$cidr\""
 read -p "${yel}[config]${end} 以上資訊無誤嗎? [y/n] " ifipcorrect
 
 # or and ref: https://unix.stackexchange.com/questions/47584/in-a-bash-script-using-the-conditional-or-in-an-if-statement
@@ -481,7 +484,7 @@ echo "${yel}[config]${end} PATH變動如下↓"
 echo "${yel}[config]${end} 原始PATH: ${grn}$PATH${end}"
 echo "${yel}[config]${end} PATH變動: ${yel}$PWD/bin:${end}${grn}$PATH${end}"
 export PATH=$PWD/bin:$PATH
-echo "export PATH=$PWD/bin:$PATH" >> ~/.bashrc
+echo "export PATH=$PWD/bin:$PATH" >> "$HOME/.${curshell}rc"
 echo "${grn}[info]${end} 創建\"istio-system\" namespace"
 kubectl create --context="$CTX_CLUSTER1" ns istio-system
 kubectl create --context="$CTX_CLUSTER2" ns istio-system
