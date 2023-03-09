@@ -10,7 +10,7 @@ echo
 echo "${grn}[info]${end} 此腳本假設使用過程中 (1) 你網路很好不會斷 (2) 沒有 apt/dpkg lock相關的問題 ， 按下\"Enter\"以繼續"
 read pause
 
-curshell=$(echo $0 | sed 's/-//g')
+curshell=$(echo $SHELL | awk -F "/" '{print $NF}')
 echo "${yel}[info]${end} 偵測到使用\"$curshell\"作為shell，相關設定檔會被寫入進\"$HOME/.${curshell}rc\""
 
 # Check if yq is installed
@@ -44,7 +44,7 @@ else
     read -p "${yel}[config]${end} 幫你裝 Kubernetes ? [y/n] " installk8s
     if [ "$installk8s" == "y" ]
     then
-        echo "[info] 開裝k8s"
+        echo "${grn}[info]${end} 開裝k8s"
         echo "${yel}[info]${end} 為了安裝k8s，請輸入目前使用者的密碼(我假設你有sudo權限，然後我不會幫你處理系統升級卡apt-lock)" # 註解好像有點長
         sudo echo "${grn}[info]${end} 我有權限惹!"
         ### start of k8s install recipe
@@ -107,12 +107,14 @@ EOF
         mkdir -p $HOME/.kube
         sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
         sudo chown $(id -u):$(id -g) $HOME/.kube/config
+        cp ~/.kube/config ~/.kube/config.bk
+        echo "${grn}[info]${end} kubeconfig備份於\"$HOME/.kube/config.bk\""
         if [ "$ismaincluster" == "y" ]
         then
-            echo "[info] 主叢集，直接 apply 一般 flannel yaml"
+            echo "${grn}[info]${end} 主叢集，直接 apply 一般 flannel yaml"
             kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
         else
-            echo "[info] 非主叢集，使用 \"Network\"=\"10.245.0.0/16\" 安裝 flannel"
+            echo "${grn}[info]${end} 非主叢集，使用 \"Network\"=\"10.245.0.0/16\" 安裝 flannel"
             curl -sS https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml | sed -e "s/\"Network\": \"10.244.0.0\/16\"/\"Network\": \"10.245.0.0\/16\"/" | kubectl apply -f -
         fi
         kubectl cluster-info
@@ -123,9 +125,6 @@ EOF
         echo "${red}[info]${end} 幫你寫好還不用，那你自己裝r"
     fi
 fi
-
-cp ~/.kube/config ~/.kube/config.bk
-echo "${grn}[info]${end} kubeconfig備份於\"$HOME/.kube/config.bk\""
 
 # 改k8s叢集名稱和kubeconfigk，這部分要一氣呵成
 read -p "${yel}[info]${end} 幫你改叢集名稱? [y/n] " chclustername
@@ -182,7 +181,7 @@ kubeconfig2path=~/.kube/config2
 
 if [ "$ismaincluster" == "y" ]
 then
-    echo "[info] 位於主叢集，檢查次要kubeconfig是否存在..."
+    echo "${grn}[info]${end} 位於主叢集，檢查次要kubeconfig是否存在..."
     if [ -f "$kubeconfig2path" ]
     then
         echo "${grn}[info]${end} 偵測到 $kubeconfig2path "
@@ -215,6 +214,21 @@ else
     fi
 fi
 
+if [ "$ismaincluster" == "y" ]
+then
+    RemoteClusterName="$cluster2name"
+    RemoteContextCluster="$cluster2name"
+    RemoteContextUser="$cluster2user"
+    RemoteContextName="$cluster2contextname"
+    RemoteUserName="$cluster2user"
+else
+    RemoteClusterName="$cluster1name"
+    RemoteContextCluster="$cluster1name"
+    RemoteContextUser="$cluster1user"
+    RemoteContextName="$cluster1contextname"
+    RemoteUserName="$cluster1user"
+fi
+
 # 新增 2nd 叢集資訊
 read -p  "${yel}[config]${end} 幫你新增第二叢集資訊? [y/n] " add2ndcluster
 if [ "$add2ndcluster" == "y" ]
@@ -225,16 +239,17 @@ then
     else
         kubeconfig2read=$kubeconfig1path
     fi
+    echo "${red}[Debug]${end} kubeconfig2read: $kubeconfig2read"
     # Cluster
     RemoteClusterCCA=$(yq e ".clusters[0].cluster.certificate-authority-data" $kubeconfig2read)
     RemoteClusterServer=$(yq e ".clusters[0].cluster.server" $kubeconfig2read)
-    RemoteClusterName=$(yq e ".clusters[0].name" $kubeconfig2read)
+    #RemoteClusterName=$(yq e ".clusters[0].name" $kubeconfig2read)
     # Contexts
-    RemoteContextCluster=$(yq e ".contexts[0].context.cluster" $kubeconfig2read)
-    RemoteContextUser=$(yq e ".contexts[0].context.user" $kubeconfig2read)
-    RemoteContextName=$(yq e ".contexts[0].name" $kubeconfig2read)
+    #RemoteContextCluster=$(yq e ".contexts[0].context.cluster" $kubeconfig2read)
+    #RemoteContextUser=$(yq e ".contexts[0].context.user" $kubeconfig2read)
+    #RemoteContextName=$(yq e ".contexts[0].name" $kubeconfig2read)
     # Users
-    RemoteUserName=$(yq e ".users[0].name" $kubeconfig2read)
+    #RemoteUserName=$(yq e ".users[0].name" $kubeconfig2read)
     RemoteUserCCA=$(yq e ".users[0].user.client-certificate-data" $kubeconfig2read)
     RemoteUserCKD=$(yq e ".users[0].user.client-key-data" $kubeconfig2read)
     # Cluster
@@ -270,6 +285,24 @@ then
 else
     echo "${red}[info]${end} 幫你寫好還不用，那你自己慢慢加第二叢集資訊"
 fi
+
+
+echo "${red}[Debug]${end} kubeconfigx"
+cat "$kubeconfig2read"
+
+echo "${red}[Debug]${end} kubeconfig.bk"
+cat $HOME/.kube/config.bk
+
+echo "${red}[Debug]${end} kubeconfig"
+cat $HOME/.kube/config.bk
+
+echo "${red}[Debug]${end} C1叢集"
+kubectl get po -A --context=c1
+echo "${red}[Debug]${end} C2叢集"
+kubectl get po -A --context=c2
+
+read -p "Debug 暫停" pause
+
 ### 上面是自動裝好k8s叢集互加
 
 nmappath=/usr/bin/nmap
@@ -524,26 +557,20 @@ sed -i "s/network: network2replace/network: $istionetwork/" IstioOperator.yaml
 # 如果是非主叢集的話要加remotePilotAddress
 if [ $ismaincluster != "y" ]
 then
-    # echo "${grn}[info]${end} 位於${yel}非主${end}叢集，請等待主叢集安裝完成後，按下 Enter 以繼續"
+    echo "${grn}[info]${end} 位於${yel}非主${end}叢集，等待主叢集istio-eastwestgateway服務..."
     while true
     do
         export DISCOVERY_ADDRESS=$(kubectl \
         --context="${CTX_CLUSTER1}" \
         -n istio-system get svc istio-eastwestgateway \
         -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        echo "\"$DISCOVERY_ADDRESS\""
         if [ -n "$DISCOVERY_ADDRESS" ]
         then
             break
         fi
         sleep 15
     done
-    echo "${yel}[info]${end} istio.DISCOVERY_ADDRESS: $DISCOVERY_ADDRESS\""
-    if [ -z "$DISCOVERY_ADDRESS" ]
-    then
-        echo "DISCOVERY_ADDRESS為空值"
-    fi
-    echo "${grn}[info]${end} 位於${yel}非主${end}叢集，新增\"DISCOVERY_ADDRESS\"變數 -> $DISCOVERY_ADDRESS"
+    echo "${yel}[info]${end} 主叢集 DISCOVERY_ADDRESS: $DISCOVERY_ADDRESS\""
     echo "      remotePilotAddress: ${DISCOVERY_ADDRESS}" >> IstioOperator.yaml
 fi
 cat IstioOperator.yaml
