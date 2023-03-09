@@ -181,7 +181,7 @@ kubeconfig2path=~/.kube/config2
 
 if [ "$ismaincluster" == "y" ]
 then
-    echo "${grn}[info]${end} 位於主叢集，檢查次要kubeconfig是否存在..."
+    echo "${grn}[info]${end} 位於${yel}主${end}叢集，檢查次要kubeconfig是否存在..."
     if [ -f "$kubeconfig2path" ]
     then
         echo "${grn}[info]${end} 偵測到 $kubeconfig2path "
@@ -197,7 +197,7 @@ then
         fi
     fi
 else
-    echo "[info] 位於非主叢集，檢查次要kubeconfig是否存在..."
+    echo "${grn}[info]${end} 位於${yel}非主${end}叢集，檢查次要kubeconfig是否存在..."
     if [ -f "$kubeconfig1path" ]
     then
         echo "${grn}[config]${end} 偵測到 $kubeconfig1path "
@@ -285,7 +285,6 @@ then
 else
     echo "${red}[info]${end} 幫你寫好還不用，那你自己慢慢加第二叢集資訊"
 fi
-
 
 echo "${red}[Debug]${end} kubeconfigx"
 cat "$kubeconfig2read"
@@ -558,6 +557,7 @@ sed -i "s/network: network2replace/network: $istionetwork/" IstioOperator.yaml
 if [ $ismaincluster != "y" ]
 then
     echo "${grn}[info]${end} 位於${yel}非主${end}叢集，等待主叢集istio-eastwestgateway服務..."
+    # 在有 DISCOVERY_ADDRESS 前先等待
     while true
     do
         export DISCOVERY_ADDRESS=$(kubectl \
@@ -575,18 +575,27 @@ then
 fi
 cat IstioOperator.yaml
 
+echo "${grn}[info]${end} 安裝 IstioOperator"
 istioctl install -y -f IstioOperator.yaml
+
+if [ $ismaincluster == "y" ]
+then
+echo "${grn}[info]${end} 公開${yel}主${end}叢集之istiod服務"
+kubectl apply --context="${CTX_CLUSTER1}" -n istio-system -f \
+    samples/multicluster/expose-istiod.yaml
+else
+kubectl get namespace istio-system && \
+  kubectl label namespace istio-system topology.istio.io/network=$istionetwork
+  istioctl x create-remote-secret \
+    --context="${CTX_CLUSTER2}" \
+    --name="$cluster2name" | \
+    kubectl apply -f - --context="${CTX_CLUSTER1}"
+fi
+
+echo "${grn}[info]${end} 公開所在叢集之API-Server"
+kubectl apply -n istio-system -f samples/multicluster/expose-services.yaml
 
 echo "${grn}[info]${end} 安裝 East-West Gateway"
 samples/multicluster/gen-eastwest-gateway.sh \
     --mesh mesh1 --cluster $clustername --network $istionetwork | \
     istioctl install -y -f -
-
-echo "${grn}[info]${end} 公開叢集之apiserver"
-kubectl apply -n istio-system -f samples/multicluster/expose-services.yaml
-
-if [ $ismaincluster != "y" ]
-then
-echo "${grn}[info]${end} 公開主叢集之 api server"
-kubectl apply -n istio-system -f samples/multicluster/expose-services.yaml
-fi
