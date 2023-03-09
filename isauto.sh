@@ -300,8 +300,6 @@ kubectl get po -A --context=c1
 echo "${red}[Debug]${end} C2叢集"
 kubectl get po -A --context=c2
 
-read -p "Debug 暫停" pause
-
 ### 上面是自動裝好k8s叢集互加
 
 nmappath=/usr/bin/nmap
